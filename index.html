@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Just 2 Minutes</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:           #07070e;
+      --surface:      #0f0f1c;
+      --border:       rgba(255,255,255,0.07);
+      --text:         #eeeeff;
+      --muted:        rgba(238,238,255,0.38);
+      --accent:       #7c3aed;
+      --accent-light: #a78bfa;
+      --zone:         #059669;
+      --zone-light:   #34d399;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    /* Ambient background glow */
+    .glow {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background: radial-gradient(ellipse 58% 46% at 50% 42%, rgba(124,58,237,.13) 0%, transparent 70%);
+      transition: background 1.4s ease;
+      z-index: 0;
+    }
+    .glow.green {
+      background: radial-gradient(ellipse 58% 46% at 50% 42%, rgba(5,150,105,.17) 0%, transparent 70%);
+    }
+
+    /* Particle canvas */
+    #canvas {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 60;
+    }
+
+    /* Main layout */
+    .app {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2.2rem;
+      padding: 2rem 1.5rem;
+      animation: fadeup .55s ease both;
+    }
+
+    @keyframes fadeup {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Header */
+    .header { text-align: center; }
+    .header h1 {
+      font-size: 1rem;
+      font-weight: 500;
+      letter-spacing: .2em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .header .sub {
+      font-size: .7rem;
+      color: rgba(238,238,255,.18);
+      letter-spacing: .07em;
+      margin-top: .28rem;
+    }
+
+    /* Timer ring */
+    .timer-wrap {
+      position: relative;
+      width: 280px;
+      height: 280px;
+    }
+
+    .timer-svg {
+      width: 100%;
+      height: 100%;
+      transform: rotate(-90deg);
+      overflow: visible;
+    }
+
+    .track {
+      fill: none;
+      stroke: rgba(255,255,255,.06);
+      stroke-width: 10;
+    }
+
+    .ring {
+      fill: none;
+      stroke: url(#grad-purple);
+      stroke-width: 10;
+      stroke-linecap: round;
+      filter: drop-shadow(0 0 10px rgba(167,139,250,.5));
+      transition: stroke .85s ease, filter .85s ease;
+    }
+
+    .ring.green {
+      stroke: url(#grad-green);
+      filter: drop-shadow(0 0 10px rgba(52,211,153,.5));
+    }
+
+    /* Center content */
+    .center {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .time-display {
+      font-size: 3.6rem;
+      font-weight: 200;
+      letter-spacing: -.02em;
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+    }
+
+    .phase-label {
+      font-size: .68rem;
+      letter-spacing: .22em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-top: .5rem;
+    }
+
+    .badge {
+      margin-top: .65rem;
+      font-size: .6rem;
+      letter-spacing: .13em;
+      text-transform: uppercase;
+      padding: .2rem .7rem;
+      border-radius: 999px;
+      border: 1px solid rgba(167,139,250,.22);
+      color: var(--accent-light);
+      background: rgba(124,58,237,.1);
+      opacity: 0;
+      transform: translateY(5px);
+      transition: opacity .4s, transform .4s, background .7s, border-color .7s, color .7s;
+    }
+    .badge.show { opacity: 1; transform: translateY(0); }
+    .badge.green {
+      border-color: rgba(52,211,153,.25);
+      color: var(--zone-light);
+      background: rgba(5,150,105,.1);
+    }
+
+    /* Controls */
+    .controls {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: .85rem;
+    }
+
+    .btn {
+      all: unset;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      font-size: .9rem;
+      font-weight: 500;
+      letter-spacing: .04em;
+      transition: transform .13s, box-shadow .18s;
+    }
+    .btn:active { transform: scale(.95) !important; }
+
+    .btn-primary {
+      padding: .85rem 2.5rem;
+      background: linear-gradient(135deg, #7c3aed, #5b21b6);
+      color: #fff;
+      box-shadow: 0 4px 20px rgba(0,0,0,.35);
+    }
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 0 0 3px rgba(167,139,250,.18), 0 6px 24px rgba(0,0,0,.4);
+    }
+
+    .btn-ghost {
+      padding: .58rem 1.45rem;
+      font-size: .78rem;
+      color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover { color: var(--text); border-color: rgba(255,255,255,.14); background: rgba(255,255,255,.02); }
+
+    /* Zone-check overlay */
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(7,7,14,.78);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding: 0 1rem 2.5rem;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .35s ease;
+      z-index: 100;
+    }
+    .overlay.show { opacity: 1; pointer-events: all; }
+
+    .card {
+      width: 100%;
+      max-width: 360px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 1.6rem;
+      padding: 1.9rem 1.8rem 1.6rem;
+      text-align: center;
+      transform: translateY(50px);
+      transition: transform .42s cubic-bezier(.34,1.56,.64,1);
+      box-shadow: 0 -8px 44px rgba(0,0,0,.45);
+    }
+    .overlay.show .card { transform: translateY(0); }
+
+    .card-emoji {
+      font-size: 2.4rem;
+      display: block;
+      margin-bottom: .9rem;
+      animation: pop .5s cubic-bezier(.34,1.56,.64,1) .28s both;
+    }
+
+    @keyframes pop {
+      from { transform: scale(.3); opacity: 0; }
+      to   { transform: scale(1);  opacity: 1; }
+    }
+
+    .card h2 { font-size: 1.25rem; font-weight: 650; margin-bottom: .45rem; }
+    .card p  { font-size: .82rem; color: var(--muted); line-height: 1.7; margin-bottom: 1.5rem; }
+
+    .card-actions { display: flex; flex-direction: column; gap: .7rem; }
+
+    .btn-card {
+      all: unset;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: .4rem;
+      padding: .88rem 1.5rem;
+      border-radius: 1rem;
+      font-size: .88rem;
+      font-weight: 500;
+      transition: transform .13s, box-shadow .18s;
+    }
+    .btn-card:active { transform: scale(.97); }
+
+    .btn-yes {
+      background: linear-gradient(135deg, #059669, #047857);
+      color: #fff;
+      box-shadow: 0 4px 20px rgba(5,150,105,.32);
+    }
+    .btn-yes:hover { box-shadow: 0 4px 26px rgba(5,150,105,.52); transform: translateY(-1px); }
+
+    .btn-no {
+      background: rgba(255,255,255,.04);
+      color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    .btn-no:hover { background: rgba(255,255,255,.07); color: var(--text); }
+
+    /* Done screen */
+    .done-screen {
+      position: fixed;
+      inset: 0;
+      background: rgba(7,7,14,.9);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1.3rem;
+      text-align: center;
+      padding: 2rem;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .55s ease;
+      z-index: 200;
+    }
+    .done-screen.show { opacity: 1; pointer-events: all; }
+
+    .done-emoji {
+      font-size: 3.8rem;
+      animation: pop .5s cubic-bezier(.34,1.56,.64,1) both;
+    }
+    .done-screen h2 { font-size: 1.8rem; font-weight: 700; }
+    .done-screen p  { font-size: .9rem; color: var(--muted); line-height: 1.75; max-width: 270px; }
+
+    /* Responsive */
+    @media (max-width: 380px) {
+      .timer-wrap { width: 240px; height: 240px; }
+      .time-display { font-size: 3rem; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="glow" id="glow"></div>
+<canvas id="canvas"></canvas>
+
+<div class="app">
+  <div class="header">
+    <h1>Just 2 Minutes</h1>
+    <p class="sub">Start small. Do anything.</p>
+  </div>
+
+  <div class="timer-wrap">
+    <svg class="timer-svg" viewBox="0 0 300 300" aria-hidden="true">
+      <defs>
+        <linearGradient id="grad-purple" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%"   stop-color="#c4b5fd"/>
+          <stop offset="100%" stop-color="#7c3aed"/>
+        </linearGradient>
+        <linearGradient id="grad-green" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%"   stop-color="#6ee7b7"/>
+          <stop offset="100%" stop-color="#059669"/>
+        </linearGradient>
+      </defs>
+      <circle class="track" cx="150" cy="150" r="130"/>
+      <circle class="ring"  cx="150" cy="150" r="130" id="ring"/>
+    </svg>
+
+    <div class="center">
+      <div class="time-display" id="timeDisplay">2:00</div>
+      <div class="phase-label"  id="phaseLabel">ready</div>
+      <div class="badge"        id="badge">Sprint</div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="btn btn-primary" id="startBtn">Start Sprint</button>
+    <button class="btn btn-ghost"   id="resetBtn" style="display:none">Reset</button>
+  </div>
+</div>
+
+<!-- Zone-check card -->
+<div class="overlay" id="overlay">
+  <div class="card">
+    <span class="card-emoji">⚡</span>
+    <h2>Are you in the zone?</h2>
+    <p>Two minutes down — the hardest part is starting, and you just did it. The momentum is yours. Keep going?</p>
+    <div class="card-actions">
+      <button class="btn-card btn-yes" id="yesBtn">I'm in the zone 🔥</button>
+      <button class="btn-card btn-no"  id="noBtn">Quit guilt-free ✨</button>
+    </div>
+  </div>
+</div>
+
+<!-- Done screen -->
+<div class="done-screen" id="doneScreen">
+  <div class="done-emoji">🎉</div>
+  <h2>Deep work done!</h2>
+  <p>17 solid minutes of focus. You showed up and built momentum — that's the whole game.</p>
+  <button class="btn btn-primary" id="againBtn" style="margin-top:.5rem">Go again</button>
+</div>
+
+<script>
+'use strict';
+
+// ── Constants ──────────────────────────────────────────────────────────────
+const CIRC  = 2 * Math.PI * 130; // r=130 → ≈816.81
+const SPRINT = 120;  // 2 min in seconds
+const DEEP   = 900;  // 15 min in seconds
+
+// ── Elements ───────────────────────────────────────────────────────────────
+const glow        = document.getElementById('glow');
+const ring        = document.getElementById('ring');
+const timeDisplay = document.getElementById('timeDisplay');
+const phaseLabel  = document.getElementById('phaseLabel');
+const badge       = document.getElementById('badge');
+const startBtn    = document.getElementById('startBtn');
+const resetBtn    = document.getElementById('resetBtn');
+const overlay     = document.getElementById('overlay');
+const doneScreen  = document.getElementById('doneScreen');
+const yesBtn      = document.getElementById('yesBtn');
+const noBtn       = document.getElementById('noBtn');
+const againBtn    = document.getElementById('againBtn');
+
+ring.style.strokeDasharray  = CIRC;
+ring.style.strokeDashoffset = 0;
+
+// ── App state ──────────────────────────────────────────────────────────────
+let state      = 'idle'; // idle | sprint | check | deep | done
+let totalSecs  = SPRINT;
+let running    = false;
+let startTime  = 0;      // performance.now() snapshot
+let accMs      = 0;      // accumulated ms before last pause
+let rafId      = null;
+let lastShown  = -1;     // last second shown in the display
+
+// ── Web Audio API ──────────────────────────────────────────────────────────
+let ac = null;
+
+function getCtx() {
+  if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
+  if (ac.state === 'suspended') ac.resume();
+  return ac;
+}
+
+function tone(freq, dur, vol = .14, type = 'sine', delay = 0) {
+  try {
+    const c = getCtx();
+    const o = c.createOscillator();
+    const g = c.createGain();
+    o.connect(g);
+    g.connect(c.destination);
+    o.type = type;
+    const t = c.currentTime + delay;
+    o.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+    o.start(t);
+    o.stop(t + dur + .02);
+  } catch (_) {}
+}
+
+function playClick() {
+  tone(1100, .05, .12);
+  tone(560,  .04, .08, 'sine', .04);
+}
+
+function playComplete() {
+  // Ascending chime: C5 E5 G5 C6
+  [[523.25, 0], [659.25, .13], [783.99, .26], [1046.5, .4]].forEach(([f, d]) =>
+    tone(f, .55, .16, 'sine', d));
+}
+
+function playZoneIn() {
+  // Warm affirming chord climb
+  [[392, 0], [523.25, .11], [659.25, .23], [783.99, .36]].forEach(([f, d]) =>
+    tone(f, .5, .14, 'sine', d));
+}
+
+function playFinale() {
+  // Grand fanfare
+  [[523.25,0],[659.25,.1],[783.99,.2],[1046.5,.32],[783.99,.46],[1046.5,.56],[1318.51,.68]]
+    .forEach(([f, d]) => tone(f, .6, .14, 'sine', d));
+}
+
+// ── Particle system ────────────────────────────────────────────────────────
+const canvas = document.getElementById('canvas');
+const pc     = canvas.getContext('2d');
+let parts    = [];
+let pRaf     = null;
+
+function resizeCanvas() { canvas.width = innerWidth; canvas.height = innerHeight; }
+resizeCanvas();
+addEventListener('resize', resizeCanvas);
+
+function burst(colors, count = 90) {
+  const cx = innerWidth / 2, cy = innerHeight / 2;
+  for (let i = 0; i < count; i++) {
+    const a   = Math.random() * Math.PI * 2;
+    const spd = 2.5 + Math.random() * 6;
+    parts.push({
+      x: cx, y: cy,
+      vx: Math.cos(a) * spd,
+      vy: Math.sin(a) * spd - 2.8,
+      life:  1,
+      decay: .012 + Math.random() * .018,
+      w: 4 + Math.random() * 5,
+      h: 2.5 + Math.random() * 3,
+      rot:  Math.random() * Math.PI * 2,
+      spin: (Math.random() - .5) * .26,
+      color: colors[Math.floor(Math.random() * colors.length)],
+    });
+  }
+  if (pRaf) cancelAnimationFrame(pRaf);
+  drawParts();
+}
+
+function drawParts() {
+  pc.clearRect(0, 0, canvas.width, canvas.height);
+  parts = parts.filter(p => p.life > 0);
+  for (const p of parts) {
+    p.x   += p.vx; p.y   += p.vy;
+    p.vy  += .13;  p.vx  *= .99;
+    p.life -= p.decay;
+    p.rot  += p.spin;
+    pc.save();
+    pc.translate(p.x, p.y);
+    pc.rotate(p.rot);
+    pc.globalAlpha = Math.max(0, p.life);
+    pc.fillStyle = p.color;
+    pc.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+    pc.restore();
+  }
+  if (parts.length) {
+    pRaf = requestAnimationFrame(drawParts);
+  } else {
+    pc.clearRect(0, 0, canvas.width, canvas.height);
+    pRaf = null;
+  }
+}
+
+// ── Timer core ─────────────────────────────────────────────────────────────
+function getElapsedMs() {
+  return running ? accMs + (performance.now() - startTime) : accMs;
+}
+
+function fmt(secs) {
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function tick() {
+  const elapsedMs  = getElapsedMs();
+  const remFloat   = Math.max(0, totalSecs - elapsedMs / 1000);
+
+  // Smooth ring update every frame
+  ring.style.strokeDashoffset = CIRC * (1 - remFloat / totalSecs);
+
+  // Text updates once per second
+  const shown = Math.ceil(remFloat);
+  if (shown !== lastShown) {
+    lastShown = shown;
+    timeDisplay.textContent = fmt(shown);
+  }
+
+  if (remFloat <= 0) {
+    ring.style.strokeDashoffset = CIRC;
+    timeDisplay.textContent = fmt(0);
+    running = false;
+    rafId   = null;
+    endPhase();
+    return;
+  }
+
+  rafId = requestAnimationFrame(tick);
+}
+
+function startRun(total) {
+  if (rafId) cancelAnimationFrame(rafId);
+  totalSecs  = total;
+  accMs      = 0;
+  startTime  = performance.now();
+  running    = true;
+  lastShown  = -1;
+  ring.style.strokeDashoffset = 0;
+  rafId = requestAnimationFrame(tick);
+}
+
+function pauseRun() {
+  if (!running) return;
+  accMs    = getElapsedMs();
+  running  = false;
+  if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+}
+
+function resumeRun() {
+  if (running) return;
+  startTime = performance.now();
+  running   = true;
+  rafId = requestAnimationFrame(tick);
+}
+
+function hardReset() {
+  if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+  running   = false;
+  accMs     = 0;
+  lastShown = -1;
+
+  ring.style.strokeDashoffset = 0;
+  ring.className = 'ring';
+  glow.className = 'glow';
+
+  timeDisplay.textContent = '2:00';
+  phaseLabel.textContent  = 'ready';
+  badge.className         = 'badge';
+
+  startBtn.textContent    = 'Start Sprint';
+  startBtn.style.display  = '';
+  resetBtn.style.display  = 'none';
+
+  overlay.classList.remove('show');
+  doneScreen.classList.remove('show');
+
+  state = 'idle';
+}
+
+function endPhase() {
+  if (state === 'sprint') {
+    playComplete();
+    burst(['#a78bfa','#c4b5fd','#7c3aed','#ede9fe','#ddd6fe','#f5f3ff']);
+    setTimeout(() => {
+      state = 'check';
+      overlay.classList.add('show');
+    }, 750);
+
+  } else if (state === 'deep') {
+    state = 'done';
+    playFinale();
+    burst(['#34d399','#6ee7b7','#059669','#a7f3d0','#fde68a','#fbbf24','#f9a8d4']);
+    setTimeout(() => doneScreen.classList.add('show'), 650);
+  }
+}
+
+// ── Button interactions ─────────────────────────────────────────────────────
+startBtn.addEventListener('click', () => {
+  playClick();
+
+  if (state === 'idle') {
+    state = 'sprint';
+    badge.textContent  = '2 min sprint';
+    badge.className    = 'badge show';
+    phaseLabel.textContent = 'focus';
+    startBtn.textContent   = 'Pause';
+    resetBtn.style.display = 'inline-flex';
+    startRun(SPRINT);
+
+  } else if (state === 'sprint' || state === 'deep') {
+    if (running) {
+      pauseRun();
+      startBtn.textContent   = 'Resume';
+      phaseLabel.textContent = 'paused';
+    } else {
+      resumeRun();
+      startBtn.textContent   = 'Pause';
+      phaseLabel.textContent = state === 'sprint' ? 'focus' : 'deep work';
+    }
+  }
+});
+
+resetBtn.addEventListener('click', () => {
+  playClick();
+  hardReset();
+});
+
+yesBtn.addEventListener('click', () => {
+  playClick();
+  setTimeout(() => playZoneIn(), 80);
+
+  overlay.classList.remove('show');
+  state = 'deep';
+
+  ring.classList.add('green');
+  ring.style.strokeDashoffset = 0; // refill ring for deep session
+  glow.classList.add('green');
+
+  badge.textContent  = 'Deep work';
+  badge.className    = 'badge show green';
+  phaseLabel.textContent = 'deep work';
+  startBtn.textContent   = 'Pause';
+
+  burst(['#34d399','#6ee7b7','#059669','#a7f3d0','#ecfdf5']);
+  setTimeout(() => startRun(DEEP), 220);
+});
+
+noBtn.addEventListener('click', () => {
+  playClick();
+  hardReset();
+});
+
+againBtn.addEventListener('click', () => {
+  playClick();
+  hardReset();
+});
+</script>
+</body>
+</html>
